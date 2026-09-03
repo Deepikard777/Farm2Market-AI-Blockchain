@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Production Build
+dist/
+dist-ssr/
+build/
+.next/
+out/
+
+# Vite
+.vite/
+*.local
+
+# TypeScript
+*.tsbuildinfo
+.tscache/
+
+# Logs (additional to root)
+logs/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Cache directories
+.npm
+.eslintcache
+.stylelintcache
+.parcel-cache
+.cache/
+.turbo/
+
+# Storybook
+storybook-static/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Editor directories and files (additional to root)
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Misc
+.vercel
+.netlify
+.firebase/

@@ -1,0 +1,160 @@
+{
+  "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "network": "localhost",
+  "deployedAt": "2026-09-03T16:53:33.936Z",
+  "abi": [
+    {
+      "type": "constructor",
+      "stateMutability": "undefined",
+      "payable": false,
+      "inputs": []
+    },
+    {
+      "type": "event",
+      "anonymous": false,
+      "name": "EventRecorded",
+      "inputs": [
+        {
+          "type": "string",
+          "name": "batchId",
+          "indexed": true
+        },
+        {
+          "type": "bytes32",
+          "name": "eventHash",
+          "indexed": false
+        },
+        {
+          "type": "uint256",
+          "name": "timestamp",
+          "indexed": false
+        },
+        {
+          "type": "address",
+          "name": "recorder",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "getBatchIds",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "string[]",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "getEventCount",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [
+        {
+          "type": "string",
+          "name": "batchId"
+        }
+      ],
+      "outputs": [
+        {
+          "type": "uint256",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "getEvents",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [
+        {
+          "type": "string",
+          "name": "batchId"
+        }
+      ],
+      "outputs": [
+        {
+          "type": "tuple[]",
+          "name": "",
+          "components": [
+            {
+              "type": "bytes32",
+              "name": "eventHash"
+            },
+            {
+              "type": "uint256",
+              "name": "timestamp"
+            },
+            {
+              "type": "address",
+              "name": "recorder"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "owner",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "address",
+          "name": ""
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "recordEvent",
+      "constant": false,
+      "payable": false,
+      "inputs": [
+        {
+          "type": "string",
+          "name": "batchId"
+        },
+        {
+          "type": "bytes32",
+          "name": "eventHash"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "function",
+      "name": "verifyEvent",
+      "constant": true,
+      "stateMutability": "view",
+      "payable": false,
+      "inputs": [
+        {
+          "type": "string",
+          "name": "batchId"
+        },
+        {
+          "type": "bytes32",
+          "name": "eventHash"
+        }
+      ],
+      "outputs": [
+        {
+          "type": "bool",
+          "name": ""
+        }
+      ]
+    }
+  ]
+}

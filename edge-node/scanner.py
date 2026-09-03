@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+"""
+FarmToMarket Edge Node — Offline QR Scanner (Role-Aware)
+=========================================================
+Scans QR codes via USB webcam, extracts the batch_id, and stores the event
+locally in SQLite. Works fully offline.
+
+The Pi reads node_config.json to know:
+  - What ROLE it plays (FARMER / TRANSPORTER / SELLER)
+  - WHO is operating it (operator_id, operator_name)
+  - WHERE it is located
+  - Which BACKEND to sync to
+
+When synced, the backend uses this info to update the product's status:
+  TRANSPORTER scan → status becomes IN_TRANSIT, transporterId set
+  SELLER scan      → status becomes AT_SELLER, sellerId set
+  FARMER scan      → dispatch event recorded at farm
+
+Usage:
+    python3 scanner.py                    # uses node_config.json
+    python3 scanner.py --cooldown 120     # override cooldown
+    python3 scanner.py --camera 1         # use /dev/video1
+
+Press ESC to quit.
+"""
+
+import argparse
+import datetime
+import json
+import os
+import sqlite3
+import time
+
+import cv2
+from pyzbar.pyzbar import decode
+
+# ──────────────────────────────────────────────
+# Paths
+# ──────────────────────────────────────────────
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(SCRIPT_DIR, "events.db")
+CONFIG_PATH = os.path.join(SCRIPT_DIR, "node_config.json")
+
+# ──────────────────────────────────────────────
+# Role → display label mapping
+# ──────────────────────────────────────────────
+ROLE_LABELS = {
+    "FARMER": "🌾 Farmer Node",
+    "TRANSPORTER": "🚛 Transporter Node",
+    "SELLER": "🏪 Seller Node",
+}
+
+ROLE_SCAN_LABELS = {
+    "FARMER": "DISPATCHED from farm",
+    "TRANSPORTER": "PICKED UP by transporter",
+    "SELLER": "RECEIVED by seller",
+}
+
+
+def load_config():
+    """Load node configuration from node_config.json."""
+    if not os.path.exists(CONFIG_PATH):
+        print(f"\n   ⚠ Config file not found: {CONFIG_PATH}")
+        print("   Please create node_config.json with your node details.")
+        print("   See README.md for examples.")
+        return None
+
+    with open(CONFIG_PATH, "r") as f:
+        config = json.load(f)
+
+    # Validate required fields
+    required = ["node_role", "operator_id", "operator_name", "location", "backend_url"]
+    missing = [k for k in required if not config.get(k)]
+    if missing:
+        print(f"\n   ⚠ Missing required config fields: {', '.join(missing)}")
+        print("   Please update node_config.json")
+        return None
+
+    role = config["node_role"].upper()
+    if role not in ("FARMER", "TRANSPORTER", "SELLER"):
+        print(f"\n   ⚠ Invalid node_role: '{role}'")
+        print("   Must be one of: FARMER, TRANSPORTER, SELLER")
+        return None
+
+    config["node_role"] = role
+    return config
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="FarmToMarket QR Scanner")
+    parser.add_argument(
+        "--cooldown", type=int, default=None,
+        help="Override cooldown seconds from config"
+    )
+    parser.add_argument(
+        "--camera", type=str, default=None,
+        help="Override camera index (e.g. 0) or IP stream URL"
+    )
+    return parser.parse_args()
+
+
+class ScanTracker:
+    """Prevents duplicate scans for the same batch at the same node."""
+
+    def __init__(self, db_path: str, node_id: str, cooldown: int):
+        self.db_path = db_path
+        self.node_id = node_id
+        self.cooldown = cooldown
+        self._recent: dict[str, float] = {}
+        self._known: set[str] = set()
+        self._load_existing()
+
+    def _load_existing(self):
+        """Pre-load batch_ids already scanned at this node."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT DISTINCT batch_id FROM scan_events WHERE node_id = ?",
+                (self.node_id,),
+            )
+            for row in cursor.fetchall():
+                self._known.add(row[0])
+            conn.close()
+            print(f"   Loaded {len(self._known)} previously scanned batch(es).")
+        except Exception as e:
+            print(f"   ⚠ Could not load history: {e}")
+
+    def is_duplicate(self, batch_id: str) -> bool:
+        if batch_id in self._known:
+            return True
+        last = self._recent.get(batch_id)
+        if last is not None and (time.time() - last) < self.cooldown:
+            return True
+        return False
+
+    def record(self, batch_id: str):
+        self._known.add(batch_id)
+        self._recent[batch_id] = time.time()
+
+
+def save_event(db_path, batch_id, node_id, node_role, operator_id, operator_name, location):
+    """Persist a scan event with full role info to SQLite."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    timestamp = datetime.datetime.now().isoformat()
+    cursor.execute(
+        "INSERT INTO scan_events "
+        "(batch_id, node_id, event_type, event_time, synced, node_role, operator_id, operator_name, location) "
+        "VALUES (?, ?, 'SCAN', ?, 0, ?, ?, ?, ?)",
+        (batch_id, node_id, timestamp, node_role, operator_id, operator_name, location),
+    )
+    conn.commit()
+    conn.close()
+    return timestamp
+
+
+def draw_feedback(frame, text, color, rect=None):
+    """Draw visual feedback overlay on camera frame."""
+    if rect is not None:
+        x, y, w, h = rect
+        cv2.rectangle(frame, (x, y), (x + w, y + h), color, 3)
+
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (0, 0), (frame.shape[1], 70), color, -1)
+    cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
+
+    cv2.putText(
+        frame, text,
+        (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
+        (255, 255, 255), 2, cv2.LINE_AA,
+    )
+
+
+def main():
+    args = parse_args()
+
+    # ── Load config ──────────────────────────
+    config = load_config()
+    if config is None:
+        return
+
+    node_role = config["node_role"]
+    operator_id = config["operator_id"]
+    operator_name = config["operator_name"]
+    location = config["location"]
+    backend_url = config["backend_url"]
+
+    # Build a unique node ID from role + operator
+    node_id = f"{node_role}_{operator_id}"
+
+    cooldown = args.cooldown or config.get("cooldown_seconds", 60)
+    
+    # Determine camera source (URL or integer index)
+    if args.camera is not None:
+        camera_source = int(args.camera) if args.camera.isdigit() else args.camera
+    elif config.get("camera_stream_url"):
+        camera_source = config.get("camera_stream_url")
+    else:
+        camera_source = config.get("camera_index", 0)
+
+    role_label = ROLE_LABELS.get(node_role, node_role)
+    scan_label = ROLE_SCAN_LABELS.get(node_role, "Scanned")
+
+    print("=" * 55)
+    print(f"  FarmToMarket — {role_label}")
+    print("=" * 55)
+    print(f"   Role     : {node_role}")
+    print(f"   Operator : {operator_name} ({operator_id})")
+    print(f"   Location : {location}")
+    print(f"   Backend  : {backend_url}")
+    print(f"   Cooldown : {cooldown}s")
+    print(f"   Camera   : {camera_source}")
+    print(f"   Database : {DB_PATH}")
+
+    if not os.path.exists(DB_PATH):
+        print("\n   ⚠ Database not found! Run setup_db.py first.")
+        return
+
+    tracker = ScanTracker(DB_PATH, node_id, cooldown)
+
+    cap = cv2.VideoCapture(camera_source)
+    if not cap.isOpened():
+        print(f"\n   ⚠ Cannot open camera {camera_source}. Check connection.")
+        return
+
+    print(f"\n   📷 {role_label} scanner running. Press ESC to exit.\n")
+
+    feedback_text = ""
+    feedback_color = (0, 0, 0)
+    feedback_until = 0
+
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("   ⚠ Camera read failed.")
+                break
+
+            codes = decode(frame)
+
+            for code in codes:
+                batch_id = code.data.decode("utf-8").strip()
+                if not batch_id:
+                    continue
+
+                if tracker.is_duplicate(batch_id):
+                    feedback_text = f"DUPLICATE: {batch_id}"
+                    feedback_color = (0, 0, 255)
+                    feedback_until = time.time() + 2
+                    print(f"   ⚠ Duplicate ignored: {batch_id}")
+                else:
+                    timestamp = save_event(
+                        DB_PATH, batch_id, node_id,
+                        node_role, operator_id, operator_name, location
+                    )
+                    tracker.record(batch_id)
+
+                    feedback_text = f"{scan_label}: {batch_id}"
+                    feedback_color = (0, 200, 0)
+                    feedback_until = time.time() + 3
+                    print(f"   ✅ {scan_label}: {batch_id} at {timestamp}")
+
+            # Draw feedback overlay
+            if time.time() < feedback_until:
+                rect_to_draw = codes[0].rect if codes else None
+                draw_feedback(frame, feedback_text, feedback_color, rect_to_draw)
+
+            # Status bar at bottom
+            status = f"{role_label} | {operator_name} | {location} | Scanned: {len(tracker._known)}"
+            cv2.putText(
+                frame, status,
+                (10, frame.shape[0] - 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+                (200, 200, 200), 1, cv2.LINE_AA,
+            )
+
+            cv2.imshow(f"FarmToMarket - {role_label}", frame)
+
+            if cv2.waitKey(1) & 0xFF == 27:
+                break
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
+        print("\n   Scanner stopped.")
+
+
+if __name__ == "__main__":
+    main()
