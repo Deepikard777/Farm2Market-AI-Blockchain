@@ -1,0 +1,39 @@
+{
+    "node_role": "TRANSPORTER",
+    "operator_id": "your-user-id-from-app",
+    "operator_name": "Ravi Transport",
+    "location": "Chennai Warehouse",
+    "backend_url": "http://localhost:8080",
+    "cooldown_seconds": 60,
+    "camera_index": 0,
+    "_help": {
+        "node_role": "Set to FARMER, TRANSPORTER, or SELLER depending on who operates this Pi",
+        "operator_id": "Copy your user ID from the FarmToMarket web app",
+        "operator_name": "Your name or business name as shown in the app",
+        "location": "Where this Pi is physically located",
+        "backend_url": "Your backend server IP, e.g. http://192.168.1.100:8080",
+        "examples": {
+            "transporter_node": {
+                "node_role": "TRANSPORTER",
+                "operator_id": "txn-abc-123",
+                "operator_name": "Ravi Transport",
+                "location": "Chennai Loading Dock",
+                "effect": "Scanning a QR sets product status to IN_TRANSIT and links this transporter"
+            },
+            "seller_node": {
+                "node_role": "SELLER",
+                "operator_id": "sel-xyz-789",
+                "operator_name": "Fresh Mart",
+                "location": "T. Nagar Store",
+                "effect": "Scanning a QR sets product status to AT_SELLER and links this seller"
+            },
+            "farmer_node": {
+                "node_role": "FARMER",
+                "operator_id": "frm-def-456",
+                "operator_name": "Kumar Farm",
+                "location": "Kanchipuram Farm",
+                "effect": "Scanning a QR records harvest/dispatch event at the farm"
+            }
+        }
+    }
+}

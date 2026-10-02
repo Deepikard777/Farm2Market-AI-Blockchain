@@ -1,0 +1,98 @@
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Environment Variables & Secrets
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+**/.env
+**/.env.*
+**/.env.local
+!.env.example
+!**/.env.example
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+JavaLauncher.log
+
+# Temporary Files and Machine/Runtime Caches
+*.tmp
+*.temp
+.cache/
+hsperfdata_*/
+**/hsperfdata_*/
+node-compile-cache/
+**/node-compile-cache/
+project-structure.txt
+
+# Backup Files
+*.bak
+*.backup
+
+# Python & Virtual Environments
+ml_venv/
+.venv/
+env/
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Generated ML model artifacts (do not commit — retrain locally or via CI)
+# rf_crop_model.pkl and reg_model.pkl are pre-trained baseline assets.
+backend/ml_models/isolation_forest.pkl
+
+# Java Build Output & Test Agent Jars
+target/
+**/target/
+backend/mockitoboot*.jar
+**/mockitoboot*.jar
+*.jar
+
+# Frontend / Node Build Output
+dist/
+**/dist/
+build/
+**/build/
+.next/
+out/
+
+# Node.js Dependencies
+node_modules/
+**/node_modules/
+
+# Blockchain / Hardhat Build Output & Cache
+blockchain/artifacts/
+**/artifacts/
+blockchain/cache/
+**/cache/
+solidity-files-cache.json
