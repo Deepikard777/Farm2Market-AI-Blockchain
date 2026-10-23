@@ -44,6 +44,11 @@ export interface JourneyStep {
   price?: number;
   description?: string;
   txHash?: string;
+  anomalyDetected?: boolean;
+  anomalyScore?: number;
+  requiresReview?: boolean;
+  anomalyReviewed?: boolean;
+  anomalyDecision?: string;
 }
 
 export interface Batch {

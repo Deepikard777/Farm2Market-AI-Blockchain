@@ -28,4 +28,11 @@ public class ScanEventEntity {
 
     /** Server-side timestamp when the event was received */
     private String receivedAt;
+
+    private String nodeRole;
+    private String location;
+    private String operatorId;
+    private String operatorName;
+    private Double temperature;
+    private Double humidity;
 }

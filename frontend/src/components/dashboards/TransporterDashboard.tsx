@@ -11,7 +11,6 @@ import { ProfileEditor } from '@/components/profile/ProfileEditor';
 import type { TransporterData } from '@/types/auth';
 import { api } from '@/services/api';
 import { useNotifications } from '@/context/NotificationContext';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { CancellationDialog } from '../transporter/CancellationDialog';
 
 import { BookingDetailsDialog } from '../transporter/BookingDetailsDialog';

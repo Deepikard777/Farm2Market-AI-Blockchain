@@ -17,7 +17,7 @@ import { YieldPrediction } from '@/components/farmer/YieldPrediction';
 import { ProfileEditor } from '@/components/profile/ProfileEditor';
 import type { FarmerData } from '@/types/auth';
 import type { Product } from '@/types/product';
-import { getProducts, createProduct, createBooking, createSellerRequest, createTransporterRequest, updateProduct } from '@/services/api';
+import { getProducts, createProduct, createSellerRequest, createTransporterRequest, updateProduct } from '@/services/api';
 import { AlertDialog as SimpleAlertDialog } from '@/components/ui/SimpleAlertDialog';
 
 import NotificationBell from '../common/NotificationBell';
@@ -82,7 +82,7 @@ export function FarmerDashboard() {
     }
   };
 
-  const handleBookTransporter = async (transporterId: string, charge: number, selectedSellerId?: string, product?: Product, transportDate?: string) => {
+  const handleBookTransporter = async (transporterId: string, charge: number, _selectedSellerId?: string, product?: Product, transportDate?: string) => {
     if (!product) {
       setErrorMessage('Please select a product/batch to transport');
       setTimeout(() => setErrorMessage(''), 3000);

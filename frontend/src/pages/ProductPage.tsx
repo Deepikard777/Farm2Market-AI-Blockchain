@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { MapPin, User, Package, Truck, Store, DollarSign, ExternalLink, Sprout, PackageCheck, ShoppingBag, Link2, Wifi } from 'lucide-react';
 import { QRCodeDisplay } from '@/components/product/QRCodeDisplay';
 import { BlockchainVerification } from '@/components/product/BlockchainVerification';
-import { getProducts } from '@/services/api';
+import { AnomalyBadge } from '@/components/product/AnomalyBadge';
+import { getProduct } from '@/services/api';
 import type { Product } from '@/types/product';
 
 export function ProductPage() {
@@ -21,13 +22,15 @@ export function ProductPage() {
       }
 
       try {
-        const products = await getProducts();
-        const found = products.find((p: Product) => p.id === productId);
-        if (found) {
+        const found = await getProduct(productId);
+        if (found && found.id) {
           setProduct(found);
+        } else {
+          setProduct(null);
         }
       } catch (error) {
         console.error('Error loading product:', error);
+        setProduct(null);
       } finally {
         setLoading(false);
       }
@@ -317,9 +320,18 @@ export function ProductPage() {
 
                           {/* Footer: status badge + blockchain tx */}
                           <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
-                            <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${badge.bg} ${badge.text}`}>
-                              {badge.label}
-                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${badge.bg} ${badge.text}`}>
+                                {badge.label}
+                              </span>
+                              {(step.anomalyDetected || step.anomalyScore || (step as any).anomalyReviewed) && (
+                                <AnomalyBadge
+                                  score={step.anomalyScore}
+                                  isSuspicious={step.anomalyDetected}
+                                  isApproved={(step as any).anomalyReviewed}
+                                />
+                              )}
+                            </div>
                             {step.txHash && (
                               <span className="flex items-center gap-1 text-[10px] text-muted-foreground dark:text-gray-500 font-mono">
                                 <Link2 className="h-3 w-3" />
@@ -338,7 +350,7 @@ export function ProductPage() {
         </Card>
 
         {/* Blockchain Verification */}
-        <BlockchainVerification batchId={product.id} autoVerify={true} />
+        <BlockchainVerification batchId={product.id} autoVerify={true} journey={product.journey} />
 
         {/* QR Code Display */}
         <QRCodeDisplay qrValue={product.qrCode} productName={product.productName} />

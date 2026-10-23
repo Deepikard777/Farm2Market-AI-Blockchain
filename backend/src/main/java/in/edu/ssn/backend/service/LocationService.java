@@ -18,7 +18,8 @@ import java.util.Map;
 @Service
 public class LocationService {
 
-    private static final String GEOAPIFY_API_KEY = "d42316f860404480a06e01930a49712b";
+    private static final String GEOAPIFY_API_KEY =
+        System.getenv("GEOAPIFY_API_KEY");
     private static final String GEOAPIFY_BASE_URL = "https://api.geoapify.com/v1/geocode/autocomplete";
 
     /**

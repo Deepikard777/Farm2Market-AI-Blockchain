@@ -23,7 +23,7 @@ function App() {
             <BrowserRouter>
               <Routes>
                 <Route
-                  path="/login"
+                  path="/login/*"
                   element={
                     <PublicRoute>
                       <ClerkLogin />
@@ -31,7 +31,7 @@ function App() {
                   }
                 />
                 <Route
-                  path="/signup"
+                  path="/signup/*"
                   element={
                     <PublicRoute>
                       <ClerkSignup />

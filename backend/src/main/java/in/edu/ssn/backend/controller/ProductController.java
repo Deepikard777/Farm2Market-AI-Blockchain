@@ -40,6 +40,12 @@ public class ProductController {
     @Autowired
     private BlockchainService blockchainService;
 
+    @Autowired
+    private in.edu.ssn.backend.service.AnomalyDetectionService anomalyDetectionService;
+
+    @Autowired
+    private in.edu.ssn.backend.repository.AnomalyFlagRepository anomalyFlagRepository;
+
     @GetMapping
     public List<Map<String, Object>> getAllProducts() {
         System.out.println("Received get all products request");
@@ -71,23 +77,28 @@ public class ProductController {
                             new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
                     if (!journey.isEmpty()) {
                         Map<String, Object> step = journey.get(0);
-                        // Ensure description field exists in the step
-                        if (!step.containsKey("description") || step.get("description") == null) {
+                        // The description is part of the canonical event data, so it MUST be
+                        // persisted here or verification can never reproduce the recorded hash.
+                        if (step.get("description") == null
+                                || String.valueOf(step.get("description")).isBlank()) {
                             step.put("description", "Batch created by " + saved.getFarmerName());
                         }
-                        String type = String.valueOf(step.getOrDefault("type", step.getOrDefault("status", "")));
-                        String timestamp = String.valueOf(step.getOrDefault("timestamp", ""));
-                        String location = String.valueOf(step.getOrDefault("location", ""));
-                        String description = String.valueOf(step.getOrDefault("description", ""));
 
-                        String eventData = BlockchainService.buildEventData(type, timestamp, location, description);
-                        String txHash = blockchainService.recordEvent(saved.getId(), eventData);
-                        if (txHash != null) {
-                            step.put("txHash", txHash);
+                        // Single source of truth for canonical event data (type|timestamp|location|description)
+                        String eventData = BlockchainService.buildEventDataFromStep(step);
+                        BlockchainService.RecordResult outcome =
+                                blockchainService.recordEventDetailed(saved.getId(), eventData);
+
+                        if (outcome.recorded()) {
+                            step.put("txHash", outcome.txHash);
+                            System.out.println("[Blockchain] Batch creation recorded, tx=" + outcome.txHash);
+                        } else {
+                            // Never store a hash that is not backed by the live chain.
+                            System.out.println("[Blockchain] Batch creation not recorded: " + outcome.detail);
                         }
+
                         saved.setJourney(objectMapper.writeValueAsString(journey));
                         productRepository.save(saved);
-                        System.out.println("[Blockchain] Batch creation recorded, tx=" + txHash);
                     }
                 } catch (Exception ex) {
                     System.err.println("[Blockchain] Failed to record batch creation: " + ex.getMessage());
@@ -140,19 +151,94 @@ public class ProductController {
                     // Only process steps that are new (beyond the old journey length)
                     for (int i = existingJourneySize; i < journey.size(); i++) {
                         Map<String, Object> step = journey.get(i);
-                        if (step.containsKey("txHash")) continue; // already recorded
 
-                        String type = String.valueOf(step.getOrDefault("type", step.getOrDefault("status", "")));
-                        String timestamp = String.valueOf(step.getOrDefault("timestamp", ""));
-                        String location = String.valueOf(step.getOrDefault("location", ""));
-                        String description = String.valueOf(step.getOrDefault("description", ""));
+                        String type = BlockchainService.stepString(step, "type");
+                        String timestamp = BlockchainService.stepString(step, "timestamp");
+                        String location = BlockchainService.stepString(step, "location");
+                        String description = BlockchainService.stepString(step, "description");
 
-                        String eventData = BlockchainService.buildEventData(type, timestamp, location, description);
-                        String txHash = blockchainService.recordEvent(saved.getId(), eventData);
-                        if (txHash != null) {
-                            step.put("txHash", txHash);
+                        // Respect an existing AI review hold (or a reviewer rejection): a step already
+                        // parked for review must never be pushed to the chain through this path.
+                        if (isHeldForReview(step) || isRejectedByReview(step)) {
+                            System.out.println("[Anomaly] Step already held/rejected by review for " + id
+                                    + " — refusing to record via product update");
+                            continue;
+                        }
+
+                        // Pre-blockchain anomaly check for manual updates
+                        in.edu.ssn.backend.service.AnomalyDetectionService.AnomalyRequest req =
+                                new in.edu.ssn.backend.service.AnomalyDetectionService.AnomalyRequest();
+                        req.batchId = saved.getId();
+                        req.eventType = type;
+                        req.eventTime = timestamp;
+                        req.location = location;
+                        req.productStatus = saved.getStatus();
+                        req.productCreatedAt = saved.getCreatedAt();
+                        req.existingEventCount = existingJourneySize;
+
+                        in.edu.ssn.backend.service.AnomalyDetectionService.AnomalyResult anom =
+                                anomalyDetectionService.checkAnomaly(req);
+
+                        if ("SUSPICIOUS".equals(anom.decision) || "REJECT".equals(anom.decision)) {
+                            System.out.println("[Anomaly] Journey update flagged as " + anom.decision + " for " + id + ", skipping blockchain");
+                            step.put("anomalyDetected", true);
+                            step.put("anomalyScore", anom.anomalyScore);
+
+                            boolean isReject = "REJECT".equals(anom.decision);
+                            if (isReject) {
+                                // Terminal: the reviewer workflow discarded this event; it is never committed.
+                                step.put("requiresReview", false);
+                                step.put("anomalyReviewed", true);
+                                step.put("anomalyDecision", "REJECTED");
+                            } else {
+                                step.put("requiresReview", true);
+                            }
+
+                            // Persist the audit flag so a SUSPICIOUS event can actually be approved
+                            // later via POST /api/anomalies/{id}/approve. Without this the step would
+                            // be stuck in PENDING_REVIEW with nothing to review.
+                            if (step.get("anomalyFlagId") == null) {
+                                try {
+                                    in.edu.ssn.backend.entity.AnomalyFlagEntity flag =
+                                            new in.edu.ssn.backend.entity.AnomalyFlagEntity();
+                                    flag.setId(java.util.UUID.randomUUID().toString());
+                                    flag.setBatchId(saved.getId());
+                                    flag.setEventType(type);
+                                    flag.setEventTime(timestamp);
+                                    flag.setLocation(location);
+                                    flag.setAnomalyScore(anom.anomalyScore);
+                                    flag.setSignals(objectMapper.writeValueAsString(anom.signals));
+                                    flag.setDecision(anom.decision);
+                                    flag.setReviewStatus(isReject ? "REJECTED" : "PENDING");
+                                    flag.setCreatedAt(java.time.Instant.now().toString());
+                                    anomalyFlagRepository.save(flag);
+                                    step.put("anomalyFlagId", flag.getId());
+                                } catch (Exception fe) {
+                                    System.err.println("[Anomaly] Failed to persist anomaly flag: " + fe.getMessage());
+                                }
+                            }
+
                             modified = true;
-                            System.out.println("[Blockchain] New journey step recorded for " + id + " tx=" + txHash);
+                            continue;
+                        }
+
+                        // A txHash stored in PostgreSQL is NOT proof the event exists on the
+                        // current chain — Hardhat is ephemeral and restarts invalidate old hashes.
+                        // Ask the contract itself before deciding to skip.
+                        String eventData = BlockchainService.buildEventData(type, timestamp, location, description);
+                        if (blockchainService.verifyEvent(saved.getId(), eventData)) {
+                            continue; // genuinely already recorded on the active chain
+                        }
+
+                        // Record (idempotent) and store the real transaction hash.
+                        BlockchainService.RecordResult outcome =
+                                blockchainService.recordEventDetailed(saved.getId(), eventData);
+                        if (outcome.recorded()) {
+                            step.put("txHash", outcome.txHash);
+                            modified = true;
+                            System.out.println("[Blockchain] New journey step recorded for " + id + " tx=" + outcome.txHash);
+                        } else if (!outcome.alreadyOnChain()) {
+                            System.out.println("[Blockchain] Journey step not recorded for " + id + ": " + outcome.detail);
                         }
                     }
 
@@ -232,6 +318,26 @@ public class ProductController {
             }
         }
         return entity;
+    }
+
+    /**
+     * True when a journey step is intentionally parked for AI anomaly review and therefore must
+     * not be committed to the blockchain by any automated path.
+     */
+    private boolean isHeldForReview(Map<String, Object> step) {
+        if (step == null) return false;
+        String status = BlockchainService.stepString(step, "status");
+        if ("PENDING_REVIEW".equalsIgnoreCase(status)) return true;
+        if (Boolean.TRUE.equals(step.get("requiresReview"))) return true;
+        return Boolean.TRUE.equals(step.get("anomalyDetected"))
+                && !Boolean.TRUE.equals(step.get("anomalyReviewed"));
+    }
+
+    /** True when the anomaly review workflow discarded this step (distinct from a normal REJECTED status). */
+    private boolean isRejectedByReview(Map<String, Object> step) {
+        if (step == null) return false;
+        Object decision = step.get("anomalyDecision");
+        return decision != null && "REJECTED".equalsIgnoreCase(String.valueOf(decision));
     }
 
     private Map<String, Object> convertToMap(ProductEntity entity) {

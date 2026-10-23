@@ -22,6 +22,8 @@ Desktop.ini
 
 # Environment Variables
 .env
+.env.*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
@@ -55,3 +57,31 @@ lerna-debug.log*
 ml_venv/
 __pycache__/
 *.pyc
+
+# Generated ML model artifacts (do not commit — retrain locally or via CI)
+# rf_crop_model.pkl and reg_model.pkl are intentionally tracked (pre-trained assets).
+backend/ml_models/isolation_forest.pkl
+
+# Java build output
+target/
+
+# Frontend / Node build output
+dist/
+node-compile-cache/
+
+# Mockito inline-mock-maker agent jar (generated during test runs)
+backend/mockitoboot*.jar
+
+# Node.js dependencies
+node_modules/
+
+# Local edge-node database
+edge-node/events.db
+
+# Local blockchain dependencies
+blockchain/node_modules/
+# Blockchain dependencies
+blockchain/node_modules/
+
+# Local edge database
+edge-node/events.db

@@ -6,7 +6,7 @@ interface NotificationListProps {
     onClose: () => void;
 }
 
-export default function NotificationList({ onClose }: NotificationListProps) {
+export default function NotificationList({ onClose: _onClose }: NotificationListProps) {
     const { notifications, markAsRead, respondToCancellation } = useNotifications();
     const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
 

@@ -36,6 +36,42 @@
       "artifacts": [
         "SupplyChain"
       ]
+    },
+    "C:\\Users\\DEEPIKA\\Downloads\\Farm2Market-main\\Farm2Market-main-backup-20261002\\blockchain\\contracts\\SupplyChain.sol": {
+      "lastModificationDate": 1792477598507,
+      "contentHash": "8d76a409d5405788b99e5f9efdcb6bba",
+      "sourceName": "contracts/SupplyChain.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "SupplyChain"
+      ]
     }
   }
 }
