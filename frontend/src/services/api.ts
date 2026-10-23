@@ -12,7 +12,25 @@ export async function getProducts(farmerId?: string) {
 
 export async function getProduct(id: string) {
   const res = await fetch(`${API_BASE}/products/${id}`);
-  return res.json();
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed to load product (${res.status})`);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+export async function getTraceability(id: string): Promise<Product | null> {
+  try {
+    const res = await fetch(`${API_BASE}/products/${id}/traceability`);
+    if (res.status === 404) return null;
+    if (res.ok) {
+      const text = await res.text();
+      return text ? JSON.parse(text) : null;
+    }
+  } catch (err) {
+    // If backend doesn't support /traceability or network hiccup, fallback to getProduct
+    console.warn('Traceability endpoint failed, falling back to standard product endpoint:', err);
+  }
+  return getProduct(id);
 }
 
 import type { Product, BookingRequest } from '@/types/product';

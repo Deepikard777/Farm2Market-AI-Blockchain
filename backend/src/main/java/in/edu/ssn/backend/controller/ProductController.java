@@ -10,6 +10,8 @@ import in.edu.ssn.backend.repository.NotificationRepository;
 import in.edu.ssn.backend.repository.TransporterRequestRepository;
 import in.edu.ssn.backend.service.BlockchainService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -117,6 +119,80 @@ public class ProductController {
         return productRepository.findById(id)
                 .map(this::convertToMap)
                 .orElse(null);
+    }
+
+    /**
+     * Public consumer traceability endpoint.
+     * Returns ONLY approved consumer traceability fields:
+     * batch ID, product name, quantity, unit, production location, farmer name,
+     * status, createdAt, current location, seller name/location, transporter name,
+     * qrCode, and sanitized journey steps (location, timestamp, description, status,
+     * blockchain txHash, anomaly audit badges).
+     *
+     * Deliberately STRIPS confidential commercial fields:
+     * - farmerId, sellerId, transporterId (internal user UUIDs)
+     * - farmerPrice, sellerPrice, transporterCharge (private wholesale and commercial prices)
+     * - step-level financial transaction prices
+     */
+    @GetMapping("/{id}/traceability")
+    public ResponseEntity<?> getProductTraceability(@PathVariable String id) {
+        return productRepository.findById(id)
+                .<ResponseEntity<?>>map(product -> {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("id", product.getId());
+                    map.put("productName", product.getProductName());
+                    map.put("quantity", product.getQuantity());
+                    map.put("unit", product.getUnit());
+                    map.put("productionLocation", product.getProductionLocation());
+                    map.put("farmerName", product.getFarmerName());
+                    map.put("status", product.getStatus());
+                    map.put("createdAt", product.getCreatedAt());
+                    map.put("currentLocation", product.getCurrentLocation());
+                    map.put("sellerName", product.getSellerName());
+                    map.put("sellerLocation", product.getSellerLocation());
+                    map.put("transporterName", product.getTransporterName());
+                    map.put("qrCode", product.getQrCode());
+
+                    // Sanitize journey steps: keep location, timestamps, descriptions, blockchain hashes, and anomaly status
+                    // strip internal user IDs and private financial negotiation prices
+                    if (product.getJourney() != null && !product.getJourney().isBlank()) {
+                        try {
+                            List<Map<String, Object>> rawJourney = objectMapper.readValue(
+                                    product.getJourney(),
+                                    new TypeReference<List<Map<String, Object>>>() {});
+                            List<Map<String, Object>> sanitizedJourney = new ArrayList<>();
+                            for (Map<String, Object> step : rawJourney) {
+                                Map<String, Object> cleanStep = new LinkedHashMap<>();
+                                cleanStep.put("id", step.get("id"));
+                                cleanStep.put("type", step.get("type"));
+                                cleanStep.put("timestamp", step.get("timestamp"));
+                                cleanStep.put("location", step.get("location"));
+                                cleanStep.put("description", step.get("description"));
+                                cleanStep.put("status", step.get("status"));
+                                cleanStep.put("txHash", step.get("txHash"));
+                                cleanStep.put("anomalyDetected", step.get("anomalyDetected"));
+                                cleanStep.put("anomalyScore", step.get("anomalyScore"));
+                                cleanStep.put("requiresReview", step.get("requiresReview"));
+                                cleanStep.put("anomalyReviewed", step.get("anomalyReviewed"));
+                                cleanStep.put("anomalyDecision", step.get("anomalyDecision"));
+                                sanitizedJourney.add(cleanStep);
+                            }
+                            map.put("journey", sanitizedJourney);
+                        } catch (Exception e) {
+                            map.put("journey", Collections.emptyList());
+                        }
+                    } else {
+                        map.put("journey", Collections.emptyList());
+                    }
+
+                    return ResponseEntity.ok(map);
+                })
+                .orElseGet(() -> {
+                    Map<String, Object> err = new LinkedHashMap<>();
+                    err.put("error", "Product not found");
+                    err.put("id", id);
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(err);
+                });
     }
 
     @PutMapping("/{id}")

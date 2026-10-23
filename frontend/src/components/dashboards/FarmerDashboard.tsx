@@ -18,6 +18,7 @@ import { ProfileEditor } from '@/components/profile/ProfileEditor';
 import type { FarmerData } from '@/types/auth';
 import type { Product } from '@/types/product';
 import { getProducts, createProduct, createSellerRequest, createTransporterRequest, updateProduct } from '@/services/api';
+import { getProductQrUrl } from '@/utils/qrUtils';
 import { AlertDialog as SimpleAlertDialog } from '@/components/ui/SimpleAlertDialog';
 
 import NotificationBell from '../common/NotificationBell';
@@ -66,10 +67,8 @@ export function FarmerDashboard() {
     // 1. Create product (backend assigns ID)
     const createdProduct = await createProduct(product);
 
-    // 2. Generate QR code with the real ID
-    // Use current origin — when accessed via network IP (e.g. 192.168.x.x:5173), the QR will be scannable from phones
-    const origin = window.location.origin;
-    const qrCode = `${origin}/product/${createdProduct.id}`;
+    // 2. Generate QR code with the real ID using dynamic origin/environment resolution
+    const qrCode = getProductQrUrl({ id: createdProduct.id });
     console.log('[QR] Generated QR URL:', qrCode);
 
     // 3. Update product with QR code
